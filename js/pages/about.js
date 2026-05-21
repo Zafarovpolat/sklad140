@@ -1,0 +1,36 @@
+let heroBottomSwiper = new Swiper('.hero-bottom-swiper', {
+	slidesPerView: '1',
+	spaceBetween: 8,
+	scrollbar: {
+		el: '.hero-bottom-swiper-scrollbar',
+		draggable: true,
+		snapOnRelease: true,
+	},
+	autoplay: {
+		delay: 3000, // 3 секунды
+		disableOnInteraction: false, // продолжать после взаимодействия
+		pauseOnMouseEnter: true, // пауза при наведении
+	},
+	speed: 800,
+})
+
+let advantagesSwiper = new Swiper('.advantages-swiper', {
+	slidesPerView: 1,
+	spaceBetween: 8,
+	scrollbar: {
+		el: '.advantages-swiper-scrollbar',
+		draggable: true,
+		snapOnRelease: true,
+	},
+	breakpoints: {
+		720: {
+			slidesPerView: 2,
+		},
+	},
+	autoplay: {
+		delay: 3000, // 3 секунды
+		disableOnInteraction: false, // продолжать после взаимодействия
+		pauseOnMouseEnter: true, // пауза при наведении
+	},
+	speed: 800,
+})

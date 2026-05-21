@@ -1,0 +1,430 @@
+/* ===== Devin UI overrides ===== */
+
+/* ---- FIX 3: hide reCaptcha badge globally ---- */
+.grecaptcha-badge {
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* ---- FIX 4: Jivosite position — move above mobile bottom nav, shrink, align next to to-the-top ---- */
+/* Jivochat v4 renders as jdiv custom elements with various class names.
+   These are stable selectors for the floating chat button. */
+jdiv.__jivoMobileButton,
+    jdiv.__jivoDesktopButton,
+    jdiv[class*="__jivoDesktopButton"],
+    jdiv[class*="__jivoMobileButton"],
+jdiv[class*="copilotButton"],
+jdiv[class*="globalClass_"][class*="button"],
+jdiv[agent-status] {
+    z-index: 99 !important;
+}
+
+/* Remove Jivosite's own internal margins (margin-right: 20px, margin-bottom: 20px on .button__gCeEM)
+   so that our `bottom`/`right` positioning is exact. */
+jdiv[class*="button__"] {
+    margin: 0 !important;
+}
+jdiv[class*="_orientationRight__"] jdiv[class*="button__"],
+jdiv[class*="_orientationLeft__"]  jdiv[class*="button__"] {
+    margin: 0 !important;
+}
+
+@media (max-width: 991px) {
+    jdiv.__jivoMobileButton,
+    jdiv.__jivoDesktopButton,
+    jdiv[class*="__jivoDesktopButton"],
+    jdiv[class*="__jivoMobileButton"],
+    jdiv[class*="copilotButton"],
+    jdiv[class*="globalClass_"][class*="button"] {
+        transform: scale(0.72) !important;
+        transform-origin: bottom right !important;
+        bottom: 110px !important;
+        right: 8px !important;
+    }
+    /* Up-button: move to the LEFT side so it doesn't collide with Jivosite.
+       Keep it well above the mobile bottom nav. */
+    .to-the-top {
+        bottom: 118px !important;
+        right: auto !important;
+        left: 12px !important;
+        padding: 8px !important;
+        font-size: 11px !important;
+    }
+    .to-the-top__icon {
+        width: 18px !important;
+        height: 18px !important;
+    }
+}
+
+@media (min-width: 992px) {
+    jdiv.__jivoMobileButton,
+    jdiv.__jivoDesktopButton,
+    jdiv[class*="__jivoDesktopButton"],
+    jdiv[class*="__jivoMobileButton"],
+    jdiv[class*="copilotButton"],
+    jdiv[class*="globalClass_"][class*="button"] {
+        transform: scale(0.85) !important;
+        transform-origin: bottom right !important;
+        bottom: 20px !important;
+        right: 20px !important;
+    }
+    /* Desktop: move to-the-top to LEFT side, away from Jivosite */
+    .to-the-top {
+        right: auto !important;
+        left: 20px !important;
+    }
+}
+
+/* ---- FIX 5: One-click-buy success modal styling ---- */
+.devin-success {
+    text-align: center;
+    color: #ffffff;
+    background-color: #258FFB;
+    border-radius: 16px;
+    padding: 32px 28px;
+    max-width: 520px;
+}
+
+.devin-success__head {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.devin-success__fire {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+}
+
+.devin-success__title {
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0;
+    line-height: 1.15;
+}
+
+.devin-success__subtitle {
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: 500;
+    line-height: 1.25;
+    margin: 0 0 12px;
+}
+
+.devin-success__text {
+    color: #ffffff;
+    font-size: 15px;
+    line-height: 1.45;
+    margin: 0 0 24px;
+    opacity: 0.95;
+}
+
+.devin-success__actions {
+    display: flex;
+    justify-content: center;
+}
+
+.devin-success__actions .button {
+    min-width: 220px;
+}
+
+@media (max-width: 575px) {
+    .devin-success { padding: 24px 20px; }
+    .devin-success__title { font-size: 22px; }
+    .devin-success__subtitle { font-size: 17px; }
+    .devin-success__text { font-size: 14px; }
+    .devin-success__fire { width: 30px; height: 30px; }
+}
+
+/* ---- FIX (Devin): Catalog dropdown was hidden under hero banner.
+   Root cause: .container has `content-visibility: auto` (paint+layout containment),
+   which clips dropdown sublist that overflows the header container.
+   Fix: disable content-visibility on the header container so dropdown can paint outside its box. */
+#header .container,
+#header .header-search,
+#header .header-search__catalog-links,
+#header .header-search__catalog-link,
+#header .header-search__catalog-sublist {
+    content-visibility: visible !important;
+    contain: none !important;
+}
+/* keep the dropdown above other positioned elements */
+#header { position: relative; z-index: 100; }
+.header-search { position: relative; z-index: 1000; }
+.header-search__catalog-links { z-index: 1001; }
+.header-search__catalog-link  { z-index: 1002; }
+.header-search__catalog-sublist { z-index: 1003; }
+
+/* ---- FIX (Devin, 2026-05-06): Catalog category cover image on mobile.
+   Issue: original theme positioned cover image with `right: -84px` assuming a
+   wide landscape image. Current images are 1:1 squares (chatgpt-generated),
+   so almost the entire image bleeds off the right edge — visible portion
+   on mobile is only ~60-100 px of pixels, which can read as "image is missing".
+   Fix: anchor image to the right side of the banner, render it as a properly
+   sized square thumbnail with object-fit:contain so it always fits within
+   the banner area without distortion. Eager-load to avoid lazy-load races on
+   above-the-fold banners. */
+@media (max-width: 768px) {
+    .catalog-cover-left {
+        position: relative;
+    }
+    .catalog-cover-left__img {
+        position: absolute !important;
+        top: 50% !important;
+        bottom: auto !important;
+        left: auto !important;
+        right: 12px !important;
+        width: 144px !important;
+        height: 144px !important;
+        max-width: 45% !important;
+        max-height: calc(100% - 16px) !important;
+        object-fit: contain !important;
+        object-position: center center !important;
+        -webkit-transform: translateY(-50%) !important;
+        -ms-transform: translateY(-50%) !important;
+        transform: translateY(-50%) !important;
+        border-radius: 12px !important;
+    }
+    /* Title may overlap image on narrow screens — cap title width so they
+       coexist cleanly. */
+    .catalog-cover-left__title,
+    .catalog-cover-left__subtitle {
+        max-width: calc(100% - 160px) !important;
+    }
+}
+
+@media (max-width: 414px) {
+    .catalog-cover-left__img {
+        width: 120px !important;
+        height: 120px !important;
+        right: 8px !important;
+    }
+    .catalog-cover-left__title,
+    .catalog-cover-left__subtitle {
+        max-width: calc(100% - 132px) !important;
+    }
+}
+
+@media (max-width: 360px) {
+    .catalog-cover-left__img {
+        width: 100px !important;
+        height: 100px !important;
+    }
+    .catalog-cover-left__title,
+    .catalog-cover-left__subtitle {
+        max-width: calc(100% - 112px) !important;
+    }
+}
+
+/* ---- Title/subtitle z-index fix on mobile cover banner ----
+   Original CSS sets z-index:10 on title/subtitle but no `position`,
+   so z-index has no effect. With our smaller image now visible at right:12px
+   the title (which wraps to 2 lines on small screens) can overlap the image.
+   Give the texts position:relative so they sit above the image. */
+@media (max-width: 768px) {
+    .catalog-cover-left__title,
+    .catalog-cover-left__subtitle {
+        position: relative !important;
+        z-index: 10 !important;
+    }
+    .catalog-cover-left__img {
+        z-index: 1 !important;
+    }
+}
+
+/* ---- FIX П-2 (Devin V2, 2026-05-09): артефакты в шапке при открытии попапов.
+   Причина: #header z-index:100 == .modal z-index:100, и .darken z-index:90 ниже,
+   поэтому при открытой модалке шапка остаётся видимой поверх затемнения.
+   Решение: поднимаем модалку и затемнение выше шапки. */
+.darken {
+    z-index: 150 !important;
+}
+.modal {
+    z-index: 200 !important;
+}
+.header-modal {
+    z-index: 250 !important;
+}
+
+/* ---- FIX: success-модалка «Отправлено!» —
+   центрируем огонёк+текст, текст «Отправлено!» белый, кнопку центрируем. */
+.modal--callme-back-success .modal-content--success,
+.modal--cart-success         .modal-content--success {
+    text-align: center !important;
+}
+.modal--callme-back-success .modal-content--success .modal-content__icon,
+.modal--cart-success         .modal-content--success .modal-content__icon {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 8px !important;
+    width: 100% !important;
+}
+.modal--callme-back-success .modal-content--success .modal__subtitle,
+.modal--cart-success         .modal-content--success .modal__subtitle {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    margin: 0 !important;
+}
+.modal--callme-back-success .modal-content--success .modal-content__icon img,
+.modal--cart-success         .modal-content--success .modal-content__icon img {
+    width: 32px !important;
+    height: auto !important;
+    vertical-align: middle !important;
+}
+.modal--callme-back-success .modal-content--success .modal__subtitle,
+.modal--cart-success         .modal-content--success .modal__subtitle {
+    font-size: 24px !important;
+    line-height: 1.2 !important;
+}
+.modal--callme-back-success .modal-content--success .button,
+.modal--cart-success         .modal-content--success .button {
+    display: block !important;
+    margin: 0 auto !important;
+    width: 100% !important;
+    max-width: 240px !important;
+}
+
+/* ---- Privacy Policy page formatting ---- */
+.policy.section { padding: 32px 0 64px; }
+.policy__info { max-width: 920px; margin: 0 auto; color: #1f2937; line-height: 1.6; font-size: 15px; }
+.policy__info h2,
+.policy__info h3,
+.policy__info h4,
+.policy__info h5,
+.policy__info h6 {
+    color: #0b2545;
+    font-weight: 700;
+    margin: 28px 0 12px;
+    line-height: 1.25;
+}
+.policy__info h4 { font-size: 22px; margin-top: 0; margin-bottom: 24px; }
+.policy__info h5 { font-size: 18px; margin-top: 28px; }
+.policy__info p { margin: 0 0 12px; }
+.policy__info p strong { color: #0b2545; margin-right: 4px; }
+.policy__info ul, .policy__info ol { margin: 0 0 16px 20px; padding: 0; }
+.policy__info li { margin-bottom: 6px; }
+.policy__info a { color: #258ffb; text-decoration: underline; }
+.policy__info mark {
+    background: transparent;
+    color: inherit;
+    border-bottom: 1px dotted #258ffb;
+    padding: 0;
+}
+@media (max-width: 768px) {
+    .policy.section { padding: 24px 0 48px; }
+    .policy__info { font-size: 14.5px; }
+    .policy__info h4 { font-size: 20px; margin-bottom: 16px; }
+    .policy__info h5 { font-size: 17px; margin-top: 22px; }
+}
+
+/* ---- FIX: search-modal blur extends above the modal because .search-modal
+   is `position: absolute` (relative to body), while .darken is fixed.
+   Pin the search modal to the viewport so the modal always sits at the very
+   top of the screen and the darken sits flush below it. */
+.search-modal {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 250 !important;
+    max-height: 100dvh !important;
+    overflow-y: auto !important;
+}
+
+/* ---- FIX (Devin): Cart success modal — blur leaks beyond the modal onto the
+   whole cart page, и сам контент модалки выглядит размытым из-за того, что
+   .darken использует backdrop-filter:blur(5px) и накладывается поверх всей
+   страницы. Заменяем размытие на сплошной тёмный полупрозрачный оверлей —
+   страница просто затемняется, а сама модалка остаётся резкой. */
+.darken,
+.darken--active {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+}
+.darken--active {
+    background: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* ---- FIX (Devin): Success modal positioning — позиционируем фиксированно
+   относительно вьюпорта поверх всего, чтобы модалка не уходила за нижний
+   край из-за content-visibility/контейнеров на странице корзины и кнопка
+   «Вернуться в каталог» всегда была видна целиком. */
+.modal--cart-success {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    -webkit-transform: translate(-50%, calc(-50% + 20px));
+    -ms-transform: translate(-50%, calc(-50% + 20px));
+    transform: translate(-50%, calc(-50% + 20px));
+    width: calc(100% - 32px) !important;
+    max-width: 520px !important;
+    max-height: calc(100dvh - 32px) !important;
+    overflow-y: auto !important;
+    z-index: 1000 !important;
+}
+.modal--cart-success.modal--active {
+    -webkit-transform: translate(-50%, -50%) !important;
+    -ms-transform: translate(-50%, -50%) !important;
+    transform: translate(-50%, -50%) !important;
+}
+/* Кнопка «Вернуться в каталог»: гарантируем центрирование текста и
+   адекватную высоту, чтобы текст не «съезжал» в кнопке. */
+.modal--cart-success .modal-content--success .button {
+    display: -webkit-inline-box !important;
+    display: -ms-inline-flexbox !important;
+    display: inline-flex !important;
+    -webkit-box-align: center !important;
+    -ms-flex-align: center !important;
+    align-items: center !important;
+    -webkit-box-pack: center !important;
+    -ms-flex-pack: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    line-height: 1.2 !important;
+    padding: 0 16px !important;
+    white-space: nowrap !important;
+}
+
+
+/* Кнопка-лупа в модалке поиска — кликабельная иконка. */
+.search-modal-header__input .search-modal-header__submit {
+    position: absolute;
+    top: 50%;
+    right: 18px;
+    -webkit-transform: translateY(-50%);
+    -ms-transform: translateY(-50%);
+    transform: translateY(-50%);
+    background: transparent;
+    border: 0;
+    padding: 6px;
+    margin: 0;
+    cursor: pointer;
+    line-height: 0;
+    display: -webkit-inline-box;
+    display: -ms-inline-flexbox;
+    display: inline-flex;
+    -webkit-box-align: center;
+    -ms-flex-align: center;
+    align-items: center;
+    -webkit-box-pack: center;
+    -ms-flex-pack: center;
+    justify-content: center;
+}
+.search-modal-header__input .search-modal-header__submit svg {
+    position: static;
+    -webkit-transform: none;
+    -ms-transform: none;
+    transform: none;
+    display: block;
+}
+.search-modal-header__input .search-modal-header__submit:hover svg path {
+    stroke: #1f6dc7;
+}
