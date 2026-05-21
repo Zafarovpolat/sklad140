@@ -136,6 +136,21 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // Клик по иконке поиска внутри input в шапке
+    var headerSearchSubmitBtn = document.getElementById('header-search-submit');
+    if (headerSearchSubmitBtn) {
+        headerSearchSubmitBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var term = (headerInput ? headerInput.value : '').trim();
+            if (term.length >= 2) {
+                window.location.href = 'https://sklad140.ru/shop/?s=' + encodeURIComponent(term);
+            } else if (headerInput) {
+                headerInput.focus();
+            }
+        });
+    }
+
     function onSearchInputChange() {
         const term = modalInput ? modalInput.value.trim() : '';
 
