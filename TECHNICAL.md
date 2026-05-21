@@ -1,186 +1,161 @@
 # Техническая документация Склад140
 
-## 📚 Содержание
+## Содержание
 
-1. [JavaScript модули](#javascript-модули)
-2. [AJAX обработчики](#ajax-обработчики)
-3. [Система фильтрации](#система-фильтрации)
-4. [Infinite Scroll](#infinite-scroll)
-5. [Поиск товаров](#поиск-товаров)
+1. [Архитектура](#архитектура)
+2. [AJAX endpoints](#ajax-endpoints)
+3. [Система поиска](#система-поиска)
+4. [Фильтрация и каталог](#фильтрация-и-каталог)
+5. [Infinite Scroll](#infinite-scroll)
 6. [Корзина](#корзина)
-7. [Wishlist и Compare](#wishlist-и-compare)
-8. [Модальные окна](#модальные-окна)
-9. [База данных](#база-данных)
-10. [Хуки и фильтры](#хуки-и-фильтры)
+7. [Формы](#формы)
+8. [Wishlist и Compare](#wishlist-и-compare)
+9. [Хлебные крошки](#хлебные-крошки)
+10. [Сортировка товаров](#сортировка-товаров)
+11. [JavaScript модули](#javascript-модули)
+12. [Безопасность](#безопасность)
+13. [Кэширование и производительность](#кэширование-и-производительность)
+14. [Хуки и фильтры](#хуки-и-фильтры)
 
 ---
 
-## 🎯 JavaScript модули
+## Архитектура
 
-### 1. main.js (24KB)
+### Общая схема запроса
 
-**Назначение**: Основной скрипт темы, управляет общей функциональностью.
-
-**Основные функции**:
-
-- Инициализация слайдеров Swiper
-- Управление мобильным меню
-- Обработка модальных окон
-- Управление каталогом в шапке
-- Анимации и переходы
-
-**Ключевые компоненты**:
-
-```javascript
-// Инициализация Swiper слайдеров
-const swiper = new Swiper(".swiper", {
-  // конфигурация
-});
-
-// Управление каталогом
-const catalogBtn = document.querySelector(".header-search__catalog-btn");
-const catalogMenu = document.querySelector(".header-search__catalog-links");
-
-// Мобильное меню
-const menuToggle = document.querySelector(".header-mobile-links__link--menu");
+```
+Браузер → Apache → PHP/WordPress → WooCommerce → MySQL
+                                  ↕
+                            W3 Total Cache (файловый кэш)
 ```
 
-### 2. infinite-scroll.js (12KB)
+### Для гостей (кэш включён)
+1. Apache отдаёт закэшированную HTML-страницу из файла
+2. JS на странице делает AJAX-запросы напрямую к `admin-ajax.php`
+3. AJAX-ответы НЕ кэшируются
 
-**Назначение**: Реализация бесконечной прокрутки для каталога товаров.
-
-**Принцип работы**:
-
-1. Отслеживает позицию скролла
-2. При достижении конца страницы отправляет AJAX запрос
-3. Загружает следующую страницу товаров
-4. Добавляет товары в DOM без перезагрузки
-
-**Ключевые параметры**:
-
-```javascript
-const grid = document.getElementById("products-grid");
-const termId = grid.dataset.termId;
-const maxPages = grid.dataset.maxPages;
-let currentPage = 1;
-let isLoading = false;
-```
-
-**AJAX запрос**:
-
-```javascript
-fetch(ajaxUrl + "?action=load_more_products", {
-  method: "POST",
-  body: formData,
-});
-```
-
-### 3. theme-search.js (11KB)
-
-**Назначение**: Живой поиск товаров с автодополнением.
-
-**Функционал**:
-
-- Поиск по мере ввода (debounce 300ms)
-- Отображение результатов в выпадающем списке
-- Подсветка найденных товаров
-- История поиска
-
-**Структура**:
-
-```javascript
-const searchInput = document.getElementById("search");
-let searchTimeout = null;
-
-searchInput.addEventListener("input", (e) => {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => {
-    performSearch(e.target.value);
-  }, 300);
-});
-```
-
-### 4. ajax-cart.js (1.4KB)
-
-**Назначение**: AJAX обновление корзины.
-
-**Функции**:
-
-- Добавление товара в корзину
-- Обновление счетчика корзины
-- Обновление фрагментов WooCommerce
-
-**Интеграция с WooCommerce**:
-
-```javascript
-jQuery(document.body).on("wc_fragments_refreshed", function () {
-  updateCartCount();
-});
-```
-
-### 5. modal-validation.js (4.5KB)
-
-**Назначение**: Валидация форм в модальных окнах.
-
-**Проверки**:
-
-- Обязательные поля
-- Формат телефона
-- Формат email
-- Длина текста
-
-**Пример валидации**:
-
-```javascript
-function validatePhone(phone) {
-  const pattern = /^\+7 \(\d{3}\) \d{3}-\d{2}-\d{2}$/;
-  return pattern.test(phone);
-}
-```
-
-### 6. search-dropdown.js (4.4KB)
-
-**Назначение**: Выпадающий список результатов поиска.
-
-**Особенности**:
-
-- Позиционирование относительно input
-- Клик вне области закрывает dropdown
-- Навигация клавиатурой (стрелки, Enter)
+### Для залогиненных (кэш отключён)
+1. Каждый запрос проходит через PHP/WordPress полностью
+2. Плагины (Yoast, W3TC admin) добавляют overhead → медленнее
 
 ---
 
-## 🔌 AJAX обработчики
+## AJAX endpoints
 
-### 1. filter_products
+Все endpoints зарегистрированы в `functions.php` через `wp_ajax_` и `wp_ajax_nopriv_` хуки.
 
-**Файл**: `functions.php:439`  
-**Action**: `wp_ajax_filter_products`, `wp_ajax_nopriv_filter_products`
 
-**Параметры POST**:
+### Таблица endpoints
+
+| Action | Функция | Nonce | Описание |
+|--------|---------|-------|----------|
+| `theme_live_search` | `theme_live_search()` | **Нет** (убран 21.05.2026) | Живой поиск товаров |
+| `filter_products` | `s140_ajax_filter_products()` | Нет | Фильтрация каталога |
+| `load_more_products` | `s140_ajax_load_more_products()` | Нет | Infinite scroll |
+| `update_cart_item_custom` | `theme_update_cart_item_custom()` | `custom-cart-nonce` | Обновление кол-ва в корзине |
+| `s140_submit_form` | `s140_submit_form_handler()` | Нет (honeypot) | Единая отправка форм |
+| `force_remove_from_wishlist` | `custom_force_remove_from_wishlist()` | Нет | Удаление из избранного |
+| `get_wishlist_count` | `custom_get_wishlist_count()` | Нет | Счётчик избранного |
+| `update_cart_count` | `theme_update_cart_count()` | Нет | Счётчик корзины |
+| `submit_review` | `submit_review_callback()` | Нет | Отправка отзыва |
+
+### Почему убран nonce у `theme_live_search`
+
+**Проблема:** W3 Total Cache кэширует HTML страницы вместе с nonce-токеном. Nonce действителен 24 часа, но страница в кэше может лежать дольше. Для гостей (и иногда для админов при стухшем кэше) `check_ajax_referer()` отклонял запрос → ответ `-1` с кодом 403.
+
+**Решение:** Nonce удалён. Endpoint `theme_live_search` — публичный read-only поиск, не выполняет никаких мутаций. Защита не требуется.
+
+**Альтернатива (если понадобится вернуть):** Загружать nonce через отдельный некэшируемый AJAX-запрос при инициализации поиска.
+
+---
+
+## Система поиска
+
+### Три уровня поиска
+
+1. **Живой поиск (модалка)** — `theme-search.js` → `theme_live_search()`
+2. **Dropdown поиск (под input)** — `search-dropdown.js` → `theme_live_search()`
+3. **Страница результатов** — `/shop/?s=запрос` → `pre_get_posts` hook
+
+### Алгоритм мягкого поиска
 
 ```php
-[
-    'term_id' => int,           // ID категории
-    'paged' => int,             // Номер страницы
-    'orderby' => string,        // Сортировка
-    'color' => array,           // Фильтр по цвету
-    'material' => array,        // Фильтр по материалу
-    'price_min' => float,       // Минимальная цена
-    'price_max' => float,       // Максимальная цена
-    'stock' => bool,            // Только в наличии
-    's' => string,              // Поисковый запрос
-    'attr_*' => array           // Динамические атрибуты
-]
+// Запрос "стол морозильный hicold 11" разбивается на слова ≥2 символов:
+$words = ['стол', 'морозильный', 'hicold', '11'];
+
+// Каждое слово ищется через LIKE в post_title (AND):
+WHERE post_title LIKE '%стол%'
+  AND post_title LIKE '%морозильный%'
+  AND post_title LIKE '%hicold%'
+  AND post_title LIKE '%11%'
 ```
 
-**Ответ**:
+### Ранжирование результатов
+
+```sql
+ORDER BY
+  CASE
+    WHEN LOWER(post_title) LIKE LOWER('стол%') THEN 100    -- начинается с первого слова
+    WHEN LOWER(post_title) LIKE LOWER('%стол%') THEN 50     -- содержит первое слово
+    ELSE 0
+  END DESC,
+  -- далее стандартная сортировка (дата/цена)
+```
+
+### Поиск в шапке — как работает
+
+1. Пользователь кликает в input `#search`
+2. Открывается модалка `.search-modal` (или dropdown `.search-dropdown`)
+3. При вводе ≥2 символов → debounce 300ms → AJAX к `theme_live_search`
+4. Результат: десктопный HTML + мобильный HTML (карточки товаров)
+5. При Enter или клике по иконке лупы → навигация на `/shop/?s=term`
+
+
+### Иконка поиска (кликабельная)
+
+В header.php иконка лупы — это `<button id="header-search-submit">` (ранее был `<div>` с `pointer-events-none`).
+
+JS обработчик в `theme-search.js`:
+```javascript
+var headerSearchSubmitBtn = document.getElementById('header-search-submit');
+headerSearchSubmitBtn.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var term = headerInput.value.trim();
+    if (term.length >= 2) {
+        window.location.href = 'https://sklad140.ru/shop/?s=' + encodeURIComponent(term);
+    }
+});
+```
+
+---
+
+## Фильтрация и каталог
+
+### POST-параметры `filter_products` / `load_more_products`
+
+```
+term_id      — int, ID категории (0 = все)
+paged        — int, номер страницы
+orderby      — string: date|price|price-desc|rating
+s            — string, поисковый запрос
+color[]      — array, slugs цветов
+material[]   — array, slugs материалов
+attr_brend[] — array, slugs бренда (динамический)
+attr_*[]     — array, любой атрибут WooCommerce
+price_min    — float
+price_max    — float
+stock        — bool, только в наличии
+loaded_ids[] — array int, уже загруженные ID (защита от дублей)
+```
+
+### Ответ
 
 ```json
 {
   "success": true,
   "data": {
-    "html": "...",
+    "html": "<div class='product-card'>...</div>...",
     "found": 42,
     "max_pages": 4,
     "current_page": 1
@@ -188,1129 +163,412 @@ function validatePhone(phone) {
 }
 ```
 
-**Логика фильтрации**:
-
-1. Построение WP_Query с tax_query и meta_query
-2. Фильтрация по категории (с дочерними)
-3. Фильтрация по атрибутам (цвет, материал, кастомные)
-4. Фильтрация по цене (BETWEEN, >=, <=)
-5. Фильтрация по наличию (\_stock_status)
-6. Поиск по названию товара (LIKE)
-
-### 2. load_more_products
-
-**Файл**: `functions.php:642`  
-**Action**: `wp_ajax_load_more_products`, `wp_ajax_nopriv_load_more_products`
-
-**Параметры**: Аналогичны `filter_products`
-
-**Отличия**:
-
-- Используется для infinite scroll
-- Возвращает только HTML товаров
-- Поддерживает рандомную сортировку для главной страницы
-
-### 3. theme_live_search
-
-**Файл**: `functions.php:877`  
-**Action**: `wp_ajax_theme_live_search`, `wp_ajax_nopriv_theme_live_search`
-
-**Параметры**:
-
-```php
-[
-    'term' => string,  // Поисковый запрос (мин. 2 символа)
-    'nonce' => string  // Nonce для безопасности
-]
-```
-
-**Ответ**:
-
-```json
-{
-  "success": true,
-  "data": {
-    "html": "...",
-    "count": 15
-  }
-}
-```
-
-**Особенности**:
-
-- Минимум 2 символа для поиска
-- Лимит 30 результатов
-- Сортировка по релевантности
-- Возвращает готовый HTML
-
-### 4. update_cart_item_custom
-
-**Файл**: `functions.php:200`  
-**Action**: `wp_ajax_update_cart_item_custom`, `wp_ajax_nopriv_update_cart_item_custom`
-
-**Параметры**:
-
-```php
-[
-    'cart_item_key' => string,  // Ключ товара в корзине
-    'quantity' => int,          // Новое количество
-    'nonce' => string           // Nonce
-]
-```
-
-**Ответ**:
-
-```json
-{
-  "success": true,
-  "data": {
-    "quantity": 2,
-    "line_total": "2 000 ₽",
-    "line_regular": "2 500 ₽",
-    "has_discount": true,
-    "cart_count": 5,
-    "subtotal": "10 000 ₽",
-    "discount_total": 1500,
-    "discount_formatted": "1 500 ₽",
-    "total": "8 500 ₽"
-  }
-}
-```
-
-**Логика**:
-
-1. Проверка nonce
-2. Обновление количества в корзине WooCommerce
-3. Пересчет итогов
-4. Расчет скидок (regular_price vs sale_price)
-5. Возврат обновленных данных
-
-### 5. force_remove_from_wishlist
-
-**Файл**: `functions.php:1072`  
-**Action**: `wp_ajax_force_remove_from_wishlist`, `wp_ajax_nopriv_force_remove_from_wishlist`
-
-**Параметры**:
-
-```php
-[
-    'product_id' => int  // ID товара
-]
-```
-
-**Ответ**:
-
-```json
-{
-    "success": true,
-    "data": {
-        "removed": true,
-        "product_id": 123,
-        "count": 5,
-        "debug": {...}
-    }
-}
-```
-
-**Особенности**:
-
-- Прямая работа с таблицей `wp_yith_wcwl`
-- Отключение вывода ошибок для чистого JSON
-- Подробная отладочная информация
-
-### 6. get_wishlist_count
-
-**Файл**: `functions.php:1149`  
-**Action**: `wp_ajax_get_wishlist_count`, `wp_ajax_nopriv_get_wishlist_count`
-
-**Ответ**:
-
-```json
-{
-  "success": true,
-  "data": {
-    "count": 7
-  }
-}
-```
-
-**Методы получения счетчика**:
-
-1. `yith_wcwl_count_products()` - стандартная функция
-2. `YITH_WCWL()->count_products()` - через объект
-3. Прямой запрос к БД - резервный вариант
-
----
-
-## 🔍 Система фильтрации
-
-### Архитектура
-
-```
-┌─────────────────┐
-│  Форма фильтров │
-│  (sidebar)      │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  JavaScript     │
-│  обработчик     │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  AJAX запрос    │
-│  filter_products│
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  PHP обработчик │
-│  WP_Query       │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  HTML товаров   │
-│  (product-card) │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Обновление DOM │
-│  + URL          │
-└─────────────────┘
-```
-
-### Типы фильтров
-
-#### 1. Категории (Taxonomy)
-
-```php
-$tax_query[] = [
-    'taxonomy' => 'product_cat',
-    'field' => 'term_id',
-    'terms' => $term_id,
-    'include_children' => true
-];
-```
-
-#### 2. Атрибуты (Color, Material)
-
-```php
-$color_tax = s140_attr_tax_slug_by_label('цвет');
-$tax_query[] = [
-    'taxonomy' => $color_tax,  // pa_cvet
-    'field' => 'slug',
-    'terms' => ['krasnyj', 'sinij'],
-    'operator' => 'IN'
-];
-```
-
-#### 3. Цена (Meta Query)
-
-```php
-$meta_query[] = [
-    'key' => '_price',
-    'value' => [$min, $max],
-    'compare' => 'BETWEEN',
-    'type' => 'DECIMAL(20,4)'
-];
-```
-
-#### 4. Наличие (Stock Status)
-
-```php
-$meta_query[] = [
-    'key' => '_stock_status',
-    'value' => 'instock'
-];
-```
-
 ### Динамические атрибуты
 
-Система автоматически обрабатывает любые атрибуты WooCommerce:
+Система автоматически обрабатывает ВСЕ зарегистрированные атрибуты WooCommerce:
 
 ```php
 $attribute_taxonomies = wc_get_attribute_taxonomies();
 foreach ($attribute_taxonomies as $attr) {
     $param_name = 'attr_' . $attr->attribute_name;
-
     if (!empty($_POST[$param_name])) {
-        $taxonomy = wc_attribute_taxonomy_name($attr->attribute_name);
-        // Добавление в tax_query
+        // → tax_query по pa_{attribute_name}
     }
 }
 ```
 
-**Примеры атрибутов**:
+### Сортировка «в наличии сверху»
 
-- `attr_brend` → `pa_brend` (Бренд)
-- `attr_strana` → `pa_strana` (Страна)
-- `attr_material` → `pa_material` (Материал)
+Хук `posts_clauses` (приоритет 999) добавляет сортировку по `stock_status`:
 
-### Сортировка
+```sql
+ORDER BY
+  CASE
+    WHEN stock_status = 'instock' THEN 0
+    WHEN stock_status = 'onbackorder' THEN 1
+    WHEN stock_status = 'outofstock' THEN 2
+  END ASC,
+  -- далее основная сортировка
+```
+
+Работает на: `/shop/`, категориях, AJAX-фильтрации (`s140_stock_first` query var).
+
+---
+
+## Infinite Scroll
+
+### Защита от дублей
+
+**Проблема:** При скролле могли загружаться те же товары повторно (разница page size, изменение данных между запросами).
+
+**Решение:** Фронтенд передаёт `loaded_ids[]` — массив всех уже загруженных product ID:
 
 ```php
-switch ($orderby) {
-    case 'price':
-        $args['orderby'] = 'meta_value_num';
-        $args['meta_key'] = '_price';
-        $args['order'] = 'ASC';
-        break;
-    case 'price-desc':
-        $args['orderby'] = 'meta_value_num';
-        $args['meta_key'] = '_price';
-        $args['order'] = 'DESC';
-        break;
-    case 'rating':
-        $args['orderby'] = 'meta_value_num';
-        $args['meta_key'] = '_wc_average_rating';
-        $args['order'] = 'DESC';
-        break;
-    default:
-        $args['orderby'] = 'date';
-        $args['order'] = 'DESC';
+if (!empty($_POST['loaded_ids'])) {
+    $args['post__not_in'] = array_map('intval', $_POST['loaded_ids']);
+    $args['paged'] = 1;  // игнорируем пагинацию, опираемся только на исключение
 }
 ```
 
+### Логика на фронте
+
+Инлайн-скрипт в `archive-product.php` / `taxonomy-product_cat.php`:
+1. Наблюдает IntersectionObserver или scroll position
+2. При приближении к низу → POST к `load_more_products`
+3. Вставляет HTML в grid, сохраняет ID в массив
+4. Останавливается когда `current_page >= max_pages`
+
+**Примечание:** Внешний `infinite-scroll.js` ОТКЛЮЧЁН (дублировал инлайн-логику).
+
 ---
 
-## ♾️ Infinite Scroll
+## Корзина
 
-### Принцип работы
+### Обновление количества (`update_cart_item_custom`)
 
-1. **Инициализация**:
+**Защищён nonce** (`custom-cart-nonce`).
 
-```javascript
-const grid = document.getElementById("products-grid");
-const termId = parseInt(grid.dataset.termId) || 0;
-let maxPages = parseInt(grid.dataset.maxPages) || 1;
-let currentPage = 1;
-let isLoading = false;
-```
-
-2. **Отслеживание скролла**:
-
-```javascript
-window.addEventListener("scroll", () => {
-  if (isLoading) return;
-
-  const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-  const scrollHeight = document.documentElement.scrollHeight;
-  const clientHeight = document.documentElement.clientHeight;
-
-  if (scrollTop + clientHeight >= scrollHeight - 500) {
-    loadMoreProducts();
-  }
-});
-```
-
-3. **Загрузка товаров**:
-
-```javascript
-async function loadMoreProducts() {
-  if (currentPage >= maxPages) return;
-
-  isLoading = true;
-  currentPage++;
-
-  const formData = new FormData();
-  formData.append("action", "load_more_products");
-  formData.append("term_id", termId);
-  formData.append("paged", currentPage);
-  // ... другие параметры фильтров
-
-  const response = await fetch(ajaxUrl, {
-    method: "POST",
-    body: formData,
-  });
-
-  const data = await response.json();
-
-  if (data.success) {
-    grid.insertAdjacentHTML("beforeend", data.data.html);
-  }
-
-  isLoading = false;
+Ответ включает:
+```json
+{
+  "quantity": 2,
+  "line_total": "2 000 ₽",
+  "line_regular": "2 500 ₽",
+  "has_discount": true,
+  "cart_count": 5,
+  "subtotal": "10 000 ₽",
+  "discount_total": 1500,
+  "discount_formatted": "1 500 ₽",
+  "total": "8 500 ₽"
 }
 ```
-
-### Синхронизация с фильтрами
-
-При изменении фильтров:
-
-1. Сбрасывается `currentPage = 1`
-2. Обновляется `maxPages` из ответа сервера
-3. Очищается grid и загружается первая страница
-4. Infinite scroll продолжает работать с новыми параметрами
-
----
-
-## 🔎 Поиск товаров
-
-### Типы поиска
-
-#### 1. Живой поиск (Live Search)
-
-**Файл**: `theme-search.js`
-
-**Особенности**:
-
-- Debounce 300ms
-- Минимум 2 символа
-- Поиск только по названию товара
-- Лимит 30 результатов
-
-**Реализация**:
-
-```javascript
-let searchTimeout;
-searchInput.addEventListener("input", (e) => {
-  const term = e.target.value.trim();
-
-  clearTimeout(searchTimeout);
-
-  if (term.length < 2) {
-    hideResults();
-    return;
-  }
-
-  searchTimeout = setTimeout(() => {
-    performSearch(term);
-  }, 300);
-});
-```
-
-#### 2. Поиск в каталоге
-
-**Файл**: `functions.php:466-491`
-
-**SQL запрос**:
-
-```php
-add_filter('posts_where', function ($where) use ($search_term) {
-    global $wpdb;
-    $like_term = $wpdb->esc_like($search_term);
-
-    $where .= $wpdb->prepare(
-        " AND (
-            {$wpdb->posts}.post_title LIKE %s OR
-            {$wpdb->posts}.post_title LIKE %s OR
-            {$wpdb->posts}.post_title LIKE %s OR
-            {$wpdb->posts}.post_title = %s
-        ) ",
-        $like_term . ' %',        // "стол что-то"
-        '% ' . $like_term . ' %', // "что-то стол что-то"
-        '% ' . $like_term,        // "что-то стол"
-        $like_term                // точное "стол"
-    );
-
-    return $where;
-}, 10);
-```
-
-**Варианты поиска**:
-
-- Начинается с: `"стол%"`
-- Содержит: `"%стол%"`
-- Заканчивается на: `"%стол"`
-- Точное совпадение: `"стол"`
-
-### Отображение результатов
-
-**HTML структура**:
-
-```html
-<a class="search-modal-content-product" href="...">
-  <div class="search-modal-content-product__img">
-    <img src="..." alt="..." />
-  </div>
-  <div class="search-modal-content-product__info">
-    <div class="cart-product__info-price__wrapper">
-      <p class="cart-product__info-price">2 000 ₽</p>
-      <p class="cart-product__info-old-price">2 500 ₽</p>
-    </div>
-    <p class="search-modal-content-product__title">Название товара</p>
-  </div>
-</a>
-```
-
----
-
-## 🛒 Корзина
 
 ### AJAX добавление в корзину
 
-**Файл**: `archive-product.php:680-711`
-
-```javascript
-grid.addEventListener('click', async (e) => {
-    const btn = e.target.closest('.product-item__btn-cart');
-    if (!btn || btn.tagName === 'A') return;
-
-    e.preventDefault();
-    const pid = btn.getAttribute('data-product_id');
-
-    btn.classList.add('is-loading');
-
-    const form = new FormData();
-    form.append('product_id', pid);
-    form.append('quantity', 1);
-
-    const res = await fetch(
-        '<?= admin_url('admin-ajax.php?action=woocommerce_add_to_cart'); ?>',
-        { method: 'POST', credentials: 'same-origin', body: form }
-    );
-
-    if (res.ok) {
-        // Обновление фрагментов WooCommerce
-        document.body.dispatchEvent(new Event('wc_fragment_refresh'));
-
-        // Замена кнопки на ссылку "В корзине"
-        const a = document.createElement('a');
-        a.href = cartUrl;
-        a.className = btn.className + ' is-in-cart';
-        a.innerHTML = btn.innerHTML;
-        btn.replaceWith(a);
-
-        // Показ уведомления
-        showToast(card);
-    }
-
-    btn.classList.remove('is-loading');
-});
+В `archive-product.php` — через стандартный WooCommerce endpoint:
 ```
-
-### Обновление количества
-
-**Файл**: `functions.php:200-271`
-
-**Процесс**:
-
-1. Проверка nonce
-2. Получение ключа товара и нового количества
-3. Обновление через `WC()->cart->set_quantity()`
-4. Пересчет итогов `WC()->cart->calculate_totals()`
-5. Расчет скидок
-6. Возврат обновленных данных
-
-**Расчет скидки**:
-
-```php
-$regular_unit = (float) $product->get_regular_price();
-$line_total = (float) $item['line_total'];
-$regular_total = $regular_unit * $quantity;
-
-$has_discount = $regular_total > $line_total && $regular_total > 0;
+POST /wp-admin/admin-ajax.php?action=woocommerce_add_to_cart
 ```
-
-### Счетчик корзины
-
-**Обновление в шапке**:
-
-```javascript
-jQuery(document.body).on("wc_fragments_refreshed", function () {
-  const count = WC.cart.get_cart_contents_count();
-  document.querySelector(".js-cart-count").textContent = count;
-});
-```
+После успеха: обновление фрагментов WC, замена кнопки на «В корзине», toast-уведомление.
 
 ---
 
-## ❤️ Wishlist и Compare
+## Формы
 
-### YITH Wishlist
+### Единый endpoint `s140_submit_form`
 
-#### Добавление в избранное
+Обрабатывает ВСЕ формы на сайте. Типы:
 
-**Стандартный механизм YITH**:
+| `form_type` | Назначение |
+|-------------|-----------|
+| `callme-back` | Перезвонить мне |
+| `one-click-buy` | Купить в 1 клик |
+| `choose-exact` | Подобрать аналог |
+| `other-questions` | Остались вопросы |
+| `contact-us` | Связаться с нами |
+| `vacancy` | Отклик на вакансию |
+| `subscribe` | Подписка на рассылку |
+| `generic` | Заявка с сайта |
 
-```html
-<a href="?add_to_wishlist=123" class="add_to_wishlist" data-product-id="123">
-  Добавить в избранное
-</a>
-```
+### Валидация
 
-#### Удаление из избранного
+**Бэкенд:**
+- Имя — обязательно
+- Телефон — ≥10 цифр
+- Согласие на обработку ПДн — обязательно
+- Honeypot: если заполнены `website` или `hp_field` → тихо принимаем, не шлём
 
-**Кастомный AJAX**:
+**Фронтенд** (`modal-validation.js`):
+- Подсветка невалидных полей (`.border-red-500`)
+- Маска телефона через InputMask (`+7 (999) 999-99-99`)
 
-```javascript
-async function removeFromWishlist(productId) {
-  const formData = new FormData();
-  formData.append("action", "force_remove_from_wishlist");
-  formData.append("product_id", productId);
+### Получатель
 
-  const response = await fetch(ajaxUrl, {
-    method: "POST",
-    body: formData,
-  });
+ACF опция `pochta` → fallback `nasklad140@gmail.com`.
 
-  const data = await response.json();
+### Лог заявок
 
-  if (data.success && data.data.removed) {
-    updateWishlistCount(data.data.count);
-    removeProductCard(productId);
-  }
-}
-```
+Все заявки сохраняются в `wp_options` (ключ `s140_form_submissions_log`, последние 200 записей) — на случай если wp_mail не сработает.
 
-#### Получение счетчика
-
-```javascript
-async function getWishlistCount() {
-  const response = await fetch(ajaxUrl + "?action=get_wishlist_count", {
-    credentials: "same-origin",
-  });
-
-  const data = await response.json();
-
-  if (data.success) {
-    updateBadge(data.data.count);
-  }
-}
-```
-
-### YITH Compare
-
-#### Структура cookie
-
-```javascript
-// Формат: JSON массив или строка с разделителями
-yith_woocompare_list = [123, 456, 789]
-// или
-yith_woocompare_list = 123%2C456%2C789
-```
-
-#### Парсинг cookie
-
-```javascript
-function getCompareIds() {
-  const cookieStr = document.cookie
-    .split("; ")
-    .find((r) => r.startsWith("yith_woocompare_list="));
-
-  if (!cookieStr) return [];
-
-  let value = decodeURIComponent(cookieStr.split("=")[1] || "");
-
-  try {
-    if (value.startsWith("[") && value.endsWith("]")) {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed.map(String) : [];
-    }
-  } catch (e) {
-    return value.split(/[%2C,|]/).filter((v) => v && /^\d+$/.test(v));
-  }
-
-  return [];
-}
-```
-
-#### Обновление счетчика
-
-```javascript
-function updateCompareCount() {
-  const ids = getCompareIds();
-  const count = ids.length;
-
-  countBox.textContent = count;
-  badge.classList.toggle("hidden", count === 0);
-}
-
-// Обновление при изменениях
-jQuery(document).on(
-  "yith_woocompare_added yith_woocompare_removed",
-  updateCompareCount,
-);
-
-// Периодическая проверка
-setInterval(updateCompareCount, 300);
-```
 
 ---
 
-## 🪟 Модальные окна
+## Wishlist и Compare
 
-### Типы модальных окон
+### YITH Wishlist — кастомные обработчики
 
-1. **Поиск** (`.search-modal`)
-2. **Мобильное меню** (`.header-modal`)
-3. **Фильтры** (`.filters-modal`)
-4. **Формы обратной связи** (кастомные)
+Стандартный YITH плагин дополнен прямыми SQL-обработчиками для надёжности:
 
-### Управление модальными окнами
-
-```javascript
-// Открытие
-function openModal(modalSelector) {
-  const modal = document.querySelector(modalSelector);
-  modal.classList.add("active");
-  document.body.classList.add("modal-open");
-}
-
-// Закрытие
-function closeModal(modalSelector) {
-  const modal = document.querySelector(modalSelector);
-  modal.classList.remove("active");
-  document.body.classList.remove("modal-open");
-}
-
-// Закрытие по клику вне области
-modal.addEventListener("click", (e) => {
-  if (e.target === modal) {
-    closeModal(modalSelector);
-  }
-});
-
-// Закрытие по Escape
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    closeAllModals();
-  }
-});
+**Удаление** (`force_remove_from_wishlist`):
+```php
+$wpdb->delete($table, ['prod_id' => $product_id, 'user_id' => $user_id]);
 ```
 
-### Валидация форм
+**Счётчик** (`get_wishlist_count`):
+- Способ 1: `yith_wcwl_count_products()`
+- Способ 2: `YITH_WCWL()->count_products()`
+- Способ 3: Прямой SQL `SELECT COUNT(*) FROM wp_yith_wcwl WHERE user_id = %d`
 
-```javascript
-function validateForm(form) {
-  const errors = [];
+Всё обёрнуто в try/catch с подавлением ошибок для чистого JSON-ответа.
 
-  // Проверка обязательных полей
-  form.querySelectorAll("[required]").forEach((field) => {
-    if (!field.value.trim()) {
-      errors.push(field);
-      field.classList.add("border-red-500");
-    } else {
-      field.classList.remove("border-red-500");
-    }
-  });
+### YITH Compare — счётчик в шапке
 
-  // Проверка телефона
-  const phone = form.querySelector('input[type="tel"]');
-  if (phone && !validatePhone(phone.value)) {
-    errors.push(phone);
-    phone.classList.add("border-red-500");
-  }
-
-  // Проверка email
-  const email = form.querySelector('input[type="email"]');
-  if (email && !validateEmail(email.value)) {
-    errors.push(email);
-    email.classList.add("border-red-500");
-  }
-
-  return errors.length === 0;
-}
-```
+Парсинг cookie `yith_woocompare_list` (JSON массив или строка с разделителями).
+Обновление через jQuery-события `yith_woocompare_added`/`yith_woocompare_removed` + `setInterval(300ms)`.
 
 ---
 
-## 💾 База данных
+## Хлебные крошки
 
-### Таблицы WooCommerce
+Функция `sklad140_get_breadcrumbs()` в `functions.php`. Поддерживает:
 
-#### wp_posts
+- Главная → Каталог → Категория → Подкатегория → Товар
+- Главная → Страница (с иерархией parent)
+- Главная → Блог → Категория → Статья
+- Главная → Поиск
+- Главная → 404
 
-```sql
--- Товары (post_type = 'product')
-ID, post_title, post_content, post_status, post_type
-```
-
-#### wp_postmeta
-
-```sql
--- Метаданные товаров
-meta_key:
-  _price              -- Цена
-  _regular_price      -- Обычная цена
-  _sale_price         -- Цена со скидкой
-  _stock_status       -- Статус наличия (instock/outofstock)
-  _wc_average_rating  -- Средний рейтинг
-```
-
-#### wp_term_taxonomy
-
-```sql
--- Категории и атрибуты
-taxonomy:
-  product_cat         -- Категории товаров
-  pa_cvet            -- Атрибут: Цвет
-  pa_material        -- Атрибут: Материал
-  pa_brend           -- Атрибут: Бренд
-  pa_strana          -- Атрибут: Страна
-```
-
-#### wp_yith_wcwl
-
-```sql
--- Избранное YITH
-CREATE TABLE wp_yith_wcwl (
-    ID int(11) NOT NULL AUTO_INCREMENT,
-    prod_id int(11) NOT NULL,
-    user_id int(11) NOT NULL,
-    wishlist_id int(11) DEFAULT NULL,
-    dateadded timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (ID),
-    KEY prod_id (prod_id),
-    KEY user_id (user_id)
-);
-```
-
-### Запросы
-
-#### Получение товаров с фильтрацией
-
-```php
-$args = [
-    'post_type' => 'product',
-    'post_status' => 'publish',
-    'posts_per_page' => 12,
-    'paged' => 1,
-    'tax_query' => [
-        'relation' => 'AND',
-        [
-            'taxonomy' => 'product_cat',
-            'field' => 'term_id',
-            'terms' => 123
-        ],
-        [
-            'taxonomy' => 'pa_cvet',
-            'field' => 'slug',
-            'terms' => ['krasnyj', 'sinij']
-        ]
-    ],
-    'meta_query' => [
-        'relation' => 'AND',
-        [
-            'key' => '_price',
-            'value' => [1000, 5000],
-            'compare' => 'BETWEEN',
-            'type' => 'DECIMAL'
-        ],
-        [
-            'key' => '_stock_status',
-            'value' => 'instock'
-        ]
-    ]
-];
-
-$query = new WP_Query($args);
-```
-
-#### Получение счетчика wishlist
-
-```sql
-SELECT COUNT(*)
-FROM wp_yith_wcwl
-WHERE user_id = %d
-```
-
-#### Удаление из wishlist
-
-```sql
-DELETE FROM wp_yith_wcwl
-WHERE prod_id = %d AND user_id = %d
-```
+Отображение в `header.php` после `</header>` (кроме главной).
 
 ---
 
-## 🎣 Хуки и фильтры
+## Сортировка товаров
 
-### Actions
+### Приоритеты (через `posts_clauses` hook, приоритет 999)
 
-#### wp_enqueue_scripts
+1. **Наличие** (instock → onbackorder → outofstock)
+2. **Основная сортировка** (выбранная пользователем или дефолтная)
 
-```php
-add_action('wp_enqueue_scripts', function() {
-    wp_enqueue_script('ajax-cart', ...);
-    wp_enqueue_script('theme-search', ...);
-    wp_enqueue_script('modal-validation', ...);
-});
-```
+### Варианты основной сортировки
 
-#### after_setup_theme
-
-```php
-add_action('after_setup_theme', function() {
-    register_nav_menus([
-        'header' => 'Меню в шапке',
-        'footer-1' => 'Меню в футере-1',
-        // ...
-    ]);
-});
-```
-
-#### pre_get_posts
-
-```php
-add_action('pre_get_posts', function($query) {
-    // Модификация запросов товаров
-    // Фильтрация, поиск
-}, 11);
-```
-
-#### wp_footer
-
-```php
-add_action('wp_footer', function() {
-    // Подключение infinite-scroll.js
-    // Отладочные скрипты
-}, 999);
-```
-
-### Filters
-
-#### woocommerce_checkout_fields
-
-```php
-add_filter('woocommerce_checkout_fields', function($fields) {
-    // Делаем поля необязательными
-    $fields['billing']['billing_last_name']['required'] = false;
-    $fields['billing']['billing_email']['required'] = false;
-    return $fields;
-});
-```
-
-#### upload_mimes
-
-```php
-add_filter('upload_mimes', function($mimes) {
-    $mimes['svg'] = 'image/svg+xml';
-    $mimes['ico'] = 'image/vnd.microsoft.icon';
-    return $mimes;
-});
-```
-
-#### yith_wcwl_localize_script
-
-```php
-add_filter('yith_wcwl_localize_script', function($localize) {
-    $localize['is_wishlist_responsive'] = false;
-    return $localize;
-});
-```
-
-#### posts_where
-
-```php
-add_filter('posts_where', function($where) use ($search_term) {
-    global $wpdb;
-    // Кастомный поиск по post_title
-    return $where;
-}, 10);
-```
-
-### Custom AJAX Actions
-
-```php
-// Фильтрация товаров
-add_action('wp_ajax_filter_products', 's140_ajax_filter_products');
-add_action('wp_ajax_nopriv_filter_products', 's140_ajax_filter_products');
-
-// Infinite scroll
-add_action('wp_ajax_load_more_products', 's140_ajax_load_more_products');
-add_action('wp_ajax_nopriv_load_more_products', 's140_ajax_load_more_products');
-
-// Живой поиск
-add_action('wp_ajax_theme_live_search', 'theme_live_search');
-add_action('wp_ajax_nopriv_theme_live_search', 'theme_live_search');
-
-// Обновление корзины
-add_action('wp_ajax_update_cart_item_custom', 'theme_update_cart_item_custom');
-add_action('wp_ajax_nopriv_update_cart_item_custom', 'theme_update_cart_item_custom');
-
-// Wishlist
-add_action('wp_ajax_force_remove_from_wishlist', 'custom_force_remove_from_wishlist');
-add_action('wp_ajax_nopriv_force_remove_from_wishlist', 'custom_force_remove_from_wishlist');
-add_action('wp_ajax_get_wishlist_count', 'custom_get_wishlist_count');
-add_action('wp_ajax_nopriv_get_wishlist_count', 'custom_get_wishlist_count');
-
-// Отзывы
-add_action('wp_ajax_submit_review', 'submit_review_callback');
-add_action('wp_ajax_nopriv_submit_review', 'submit_review_callback');
-```
+| Значение | ORDER BY |
+|----------|----------|
+| `date` | `post_date DESC` |
+| `price` | `_price ASC` |
+| `price-desc` | `_price DESC` |
+| `rating` | `_wc_average_rating DESC` |
 
 ---
 
-## 🔧 Вспомогательные функции
+## JavaScript модули
 
-### s140_attr_tax_slug_by_label()
+### main.js (~24KB)
+- Класс `SearchModal` — открытие/закрытие модалки поиска, блокировка скролла
+- Инициализация Swiper слайдеров
+- Мобильное меню (`.header-modal`)
+- Каталог в шапке (двойной клик на мобиле)
 
-```php
-/**
- * Получить slug таксономии атрибута по label
- *
- * @param string $label Название атрибута (например, "цвет")
- * @return string Slug таксономии (например, "pa_cvet")
- */
-function s140_attr_tax_slug_by_label($label) {
-    $label = mb_strtolower(trim($label), 'UTF-8');
+### theme-search.js (~11KB)
+- Живой поиск через модалку
+- Синхронизация header input ↔ modal input
+- Debounce 300ms → AJAX `theme_live_search`
+- История поиска (localStorage `siteSearchHistory`)
+- «Часто ищут» — клик по табам
+- **Клик по иконке лупы** → навигация на `/shop/?s=`
 
-    foreach (wc_get_attribute_taxonomies() as $a) {
-        $attr_label = mb_strtolower($a->attribute_label, 'UTF-8');
-        if ($attr_label === $label) {
-            return 'pa_' . $a->attribute_name;
-        }
-    }
+### search-dropdown.js (~4.4KB)
+- Альтернативный режим: dropdown прямо под input (без модалки)
+- Скрывает `.search-modal` при использовании
+- AJAX к тому же `theme_live_search`
 
-    return '';
-}
-```
+### ajax-cart.js (~1.4KB)
+- Обновление фрагментов WC после добавления в корзину
+- Синхронизация счётчика корзины в шапке
 
-### strike_in_cart()
+### modal-validation.js (~4.5KB)
+- Перехват submit всех форм (`.modal-content-form`)
+- Валидация (имя, телефон, consent)
+- AJAX отправка на `s140_submit_form`
+- Показ success/error состояний
 
-```php
-/**
- * Проверка наличия товара в корзине
- *
- * @param int $pid ID товара
- * @return bool
- */
-function strike_in_cart($pid) {
-    if (!function_exists('WC')) return false;
-
-    $cart = WC()->cart->get_cart();
-    if (empty($cart)) return false;
-
-    foreach ($cart as $item) {
-        if ((int)($item['product_id'] ?? 0) === (int)$pid) {
-            return true;
-        }
-    }
-
-    return false;
-}
-```
-
-### strike_first_attributes()
-
-```php
-/**
- * Получение первых N атрибутов товара
- *
- * @param WC_Product $prod Объект товара
- * @param int $limit Количество атрибутов
- * @return array [['label' => '...', 'value' => '...'], ...]
- */
-function strike_first_attributes($prod, $limit = 3) {
-    $out = [];
-
-    foreach ($prod->get_attributes() as $attr) {
-        if (count($out) >= $limit) break;
-
-        if ($attr->is_taxonomy()) {
-            $name = wc_attribute_label($attr->get_name());
-            $terms = wc_get_product_terms(
-                $prod->get_id(),
-                $attr->get_name(),
-                ['fields' => 'names']
-            );
-            if ($terms) {
-                $out[] = [
-                    'label' => $name,
-                    'value' => implode(', ', array_slice($terms, 0, 3))
-                ];
-            }
-        }
-    }
-
-    return array_slice($out, 0, $limit);
-}
-```
+### minified/main.min.js
+- Продакшен-версия `main.js`
+- Подключается в `header.php` с `?ver={filemtime}`
 
 ---
 
-## 📊 Производительность
+## Безопасность
 
-### Оптимизации запросов
+### Что защищено nonce
+- `update_cart_item_custom` — `custom-cart-nonce`
+- `s140_submit_form` — через `s140Forms.nonce` (на фронте), но проверка в handler отсутствует (защита через honeypot)
 
-1. **Использование prepared statements**:
+### Что НЕ защищено nonce (и почему)
+- `theme_live_search` — публичный read-only, кэш ломает nonce
+- `filter_products` / `load_more_products` — публичный read-only
+- `get_wishlist_count` — read-only
+- `force_remove_from_wishlist` — проверяет `user_id` через сессию
 
+### Санитизация (везде)
 ```php
-$wpdb->prepare("SELECT * FROM table WHERE id = %d", $id);
+sanitize_text_field(), sanitize_textarea_field(), sanitize_email()
+wp_unslash(), $wpdb->esc_like(), $wpdb->prepare()
 ```
 
-2. **Кэширование результатов**:
-
+### Экранирование (везде)
 ```php
-$cached = wp_cache_get('key', 'group');
-if ($cached === false) {
-    $result = expensive_query();
-    wp_cache_set('key', $result, 'group', 3600);
-}
+esc_html(), esc_url(), esc_attr(), wp_kses_post()
 ```
 
-3. **Лимиты на количество результатов**:
+### Honeypot (формы)
+Скрытые поля `website` / `hp_field` — если заполнены, запрос тихо принимается без отправки письма.
 
-```php
-'posts_per_page' => 12,  // Не загружаем все товары сразу
+---
+
+## Кэширование и производительность
+
+### W3 Total Cache
+
+- **Page Cache:** Disk Enhanced (файловый кэш для гостей)
+- **Залогиненные:** кэш отключён (нет кэширования по ролям)
+- **admin-ajax.php:** не кэшируется
+
+### WP-Cron
+
+Отключён (`DISABLE_WP_CRON = true`). Заменён серверным cron:
+```
+*/5 * * * * wget -q -O /dev/null https://sklad140.ru/wp-cron.php
 ```
 
-4. **Индексы в БД**:
+### Оптимизации БД (выполнены 21.04.2026)
 
-```sql
-KEY prod_id (prod_id)
-KEY user_id (user_id)
-```
+- Удалено 20 000 мусорных записей (transients, orphaned meta)
+- Удалено 9 000 ревизий постов
+- Добавлены индексы на часто используемые meta_key
 
 ### Минификация
 
-- CSS файлы минифицированы (`.min.css`)
-- JS файлы минифицированы (`.min.js`)
-- SVG спрайты вместо отдельных иконок
+- CSS: все файлы `.min.css`
+- JS: `/js/minified/main.min.js` (+ `index.min.js` для главной)
+- Версионирование: `?ver={filemtime}` для cache-busting
 
 ### Lazy Loading
 
 ```html
-<img src="..." loading="lazy" alt="..." />
+<img loading="lazy" ...>
+```
+
+Все изображения в карточках товаров, баннерах, футере.
+
+---
+
+## Хуки и фильтры
+
+### Кастомные actions
+
+```php
+// Фильтрация
+add_action('wp_ajax[_nopriv]_filter_products', 's140_ajax_filter_products');
+add_action('wp_ajax[_nopriv]_load_more_products', 's140_ajax_load_more_products');
+
+// Поиск
+add_action('wp_ajax[_nopriv]_theme_live_search', 'theme_live_search');
+
+// Корзина
+add_action('wp_ajax[_nopriv]_update_cart_item_custom', 'theme_update_cart_item_custom');
+add_action('wp_ajax[_nopriv]_update_cart_count', 'theme_update_cart_count');
+
+// Формы
+add_action('wp_ajax[_nopriv]_s140_submit_form', 's140_submit_form_handler');
+
+// Wishlist
+add_action('wp_ajax[_nopriv]_force_remove_from_wishlist', ...);
+add_action('wp_ajax[_nopriv]_get_wishlist_count', ...);
+
+// Отзывы
+add_action('wp_ajax[_nopriv]_submit_review', 'submit_review_callback');
+```
+
+### Кастомные filters
+
+```php
+// Сортировка «в наличии сверху»
+add_filter('posts_clauses', 's140_stock_first_catalog_order', 999, 2);
+
+// Мягкий поиск
+add_action('pre_get_posts', function($query) { ... }, 20);
+// → add_filter('posts_where', ...) + add_filter('posts_orderby', ...)
+
+// Все атрибуты в карточке товара
+add_filter('woocommerce_display_product_attributes', ..., 20, 2);
+
+// Перевод "Product Info" → "Товар"
+add_filter('gettext', ..., 10, 3);
+
+// Необязательные поля checkout
+add_filter('woocommerce_checkout_fields', ...);
+
+// SVG/ICO upload
+add_filter('upload_mimes', ...);
+add_filter('wp_check_filetype_and_ext', ...);
+```
+
+### Редиректы
+
+```php
+// /vacant/ → /vacancy/ (301)
+add_action('init', function() { ... });
 ```
 
 ---
 
-## 🔒 Безопасность
-
-### Nonce проверки
+## Локализация JS
 
 ```php
-check_ajax_referer('theme_search_nonce', 'nonce');
+// Поиск
+wp_localize_script('theme-search', 'ThemeSearch', [
+    'ajaxUrl' => admin_url('admin-ajax.php'),
+    'nonce'   => wp_create_nonce('theme_search_nonce'), // legacy, не проверяется
+]);
+
+// Формы
+wp_localize_script('modal-validation', 's140Forms', [
+    'ajaxUrl' => admin_url('admin-ajax.php'),
+    'nonce'   => wp_create_nonce('s140_submit_form'),
+]);
+
+// Корзина
+wp_localize_script('ajax-cart', 'ajaxCart', [
+    'ajaxurl' => admin_url('admin-ajax.php'),
+    'wc_ajax' => site_url(),
+]);
 ```
 
-### Санитизация
+---
+
+## Карточка товара (`template-parts/product-card.php`)
+
+Используется везде: каталог, поиск, infinite scroll, похожие товары, мобильный поиск.
+
+Показывает:
+- Изображение (с fallback на placeholder)
+- Название
+- Цена (текущая + зачёркнутая если скидка)
+- Первые 3 атрибута (`strike_first_attributes()`)
+- Статус наличия
+- Кнопка «В корзину» (или «Подобрать аналог» если не в наличии)
+- Кнопки Wishlist / Compare
+
+---
+
+## Атрибуты товаров
+
+### Проблема с `is_visible`
+
+Bulk-editor WooCommerce создаёт атрибуты с `is_visible=0`. Они появляются в листинге, но пропадают в карточке.
+
+### Решение
+
+Хук `woocommerce_display_product_attributes` (приоритет 20) принудительно добавляет ВСЕ атрибуты товара, включая `is_visible=0`:
 
 ```php
-$term = sanitize_text_field(wp_unslash($_POST['term']));
-$email = sanitize_email($_POST['email']);
-$comment = sanitize_textarea_field($_POST['comment']);
-```
-
-### Экранирование
-
-```php
-echo esc_html($title);
-echo esc_url($link);
-echo esc_attr($attribute);
-echo wp_kses_post($content);
-```
-
-### Prepared Statements
-
-```php
-$wpdb->prepare("SELECT * FROM table WHERE id = %d", $id);
-```
-
-### Проверка прав
-
-```php
-if (!current_user_can('edit_posts')) {
-    wp_die('Access denied');
+foreach ($product->get_attributes() as $attribute) {
+    $key = 'attribute_' . sanitize_title_with_dashes($name);
+    if (isset($product_attributes[$key])) continue; // уже есть
+    // ... добавляем в массив
 }
 ```
 
 ---
 
-**Дата создания**: 2026-02-13  
-**Версия документации**: 1.0
+**Последнее обновление:** 21.05.2026
