@@ -302,11 +302,11 @@
                     <div class="header-search__input relative w-full max-w-131">
                         <input type="text" name="search" id="search" placeholder="Что будем искать?" autocomplete="off"
                             class="bg-white placeholder:text-brand-gray border border-transparent rounded-xl text-sm min-h-12 w-full focus:border-brand-blue outline-none px-4 py-3" />
-                        <div class="absolute top-1/2 -translate-y-1/2 right-4 pointer-events-none">
+                        <button type="button" id="header-search-submit" class="absolute top-1/2 -translate-y-1/2 right-4 cursor-pointer bg-transparent border-none p-0" aria-label="Искать">
                             <svg width="20" height="20">
                                 <use xlink:href="<?= get_template_directory_uri(); ?>/images/sprite.svg#search"></use>
                             </svg>
-                        </div>
+                        </button>
 
                     </div>
 

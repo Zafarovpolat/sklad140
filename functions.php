@@ -944,7 +944,8 @@ add_action('wp_ajax_nopriv_theme_live_search', 'theme_live_search');
 
 function theme_live_search()
 {
-    check_ajax_referer('theme_search_nonce', 'nonce');
+    // Nonce check removed: this is a public read-only search endpoint.
+    // W3TC caches pages with stale nonces, causing 403 for guests (and sometimes admins).
 
     $term = isset($_POST['term']) ? sanitize_text_field(wp_unslash($_POST['term'])) : '';
 
